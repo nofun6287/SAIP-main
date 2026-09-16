@@ -1,0 +1,25 @@
+# SAIP -- required packages
+#
+# The three core packages below are all that Sections 3.1, 3.2 and 3.4 need;
+# the demo in README Section 3 runs with exactly these.
+
+numpy>=1.24
+scikit-learn>=1.3
+PyYAML>=6.0
+
+# Section 3.3 (the boundary calibration network).  If torch is absent the
+# pipeline still completes and reports the SFS-only L^(0), noting why.
+# Install the CPU or CUDA build that matches your machine, e.g.
+#   pip install torch --index-url https://download.pytorch.org/whl/cu121
+torch>=2.0
+
+# Optional -- only for the `blip` feature backend, i.e. extracting h_t / c_t / q_i
+# in-process instead of reading the cached arrays from disk.  The two frozen
+# checkpoints themselves are not distributed here; point FeatureConfig.itm_ckpt
+# and FeatureConfig.caption_ckpt at your local copies.
+#
+#   ffmpeg-python>=0.2      frame extraction
+#   opencv-python>=4.8      decoding fallback when ffmpeg is unavailable
+#   timm>=0.9               ViT backbone of BLIP
+#   transformers>=4.30      BLIP model definitions
+#   Pillow>=10.0            image transforms

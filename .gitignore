@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Environments
+.venv/
+venv/
+env/
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# SAIP runs and data -- never commit a corpus or a feature cache
+out/
+runs/
+demo_data/
+feats/
+captions/
+text_feats/
+
+# Model weights: the BLIP checkpoints are not distributed with this repository
+*.pth
+*.pt
+*.bin
+*.safetensors
+
+# Video
+*.mp4
+*.mkv
+*.webm
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
