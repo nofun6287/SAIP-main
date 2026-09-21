@@ -259,9 +259,8 @@ def greedy_select(events: Sequence[CandidateEvent],
 
     Each step takes the remaining candidate with the largest SFS and removes
     every other candidate whose temporal IoU with it exceeds ``tioi_thresh``
-    (Section 3.2.5).  The guarantee discussed in the paper is the classical
-    ``(1 - 1/e)`` bound for greedy maximisation of a monotone submodular
-    function.
+    (Section 3.2.5). Fixed-score ranking with overlap suppression is a heuristic;
+    the cardinality-constrained submodular approximation guarantee does not apply.
     """
     pool = list(events)
     selected: List[CandidateEvent] = []

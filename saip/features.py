@@ -18,9 +18,9 @@ distributed with this repository, only their identifiers.
 
 Recommended cache layout::
 
-    feats/<video_id>.npy        float32 (T, 768)          Eq. (1)
+    feats/<video_id>.npy        float32 (T, 256)          Eq. (1)
     captions/<video_id>.json    list[str], one per frame  c_t
-    text_feats/<video_id>.npy   float32 (T, 768)          q_i of c_t
+    text_feats/<video_id>.npy   float32 (T, 256)          q_i of c_t
 
 The caption file may also hold a list of lists (one entry per sampling of the
 decoder); the first sample of each frame is used, matching ``num_stnc = 1``.
@@ -94,7 +94,8 @@ def probe_video(path: str) -> dict:
 def decode_frames(path: str,
                   stride: int = 8,
                   input_size: int = 384,
-                  centre_crop: bool = True) -> np.ndarray:
+                  centre_crop: bool = True,
+                  sampling_fps: Optional[float] = None) -> np.ndarray:
     """Decode a video to ``(T, 3, input_size, input_size)`` uint8 frames.
 
     One frame every ``stride`` is kept, so the resulting frame rate is
@@ -119,7 +120,7 @@ def decode_frames(path: str,
         out_h, out_w = input_size, int(width * input_size / height)
 
     stream = (ffmpeg.input(str(path))
-              .filter("fps", fps=info["fps"] / max(stride, 1))
+              .filter("fps", fps=sampling_fps or info["fps"] / max(stride, 1))
               .filter("scale", out_w, out_h))
     if centre_crop:
         stream = stream.crop(int((out_w - input_size) / 2.0),
@@ -225,7 +226,7 @@ class BlipModels:
 
     # -- extraction --------------------------------------------------------
     def frame_features(self, frames: np.ndarray) -> np.ndarray:
-        """Eq. (1): ``(T, 3, S, S)`` uint8 -> ``(T, 768)`` float32."""
+        """Eq. (1): ``(T, 3, S, S)`` uint8 -> ``(T, 256)`` float32."""
         torch = self._torch()
         model = self.itm
         out: List[np.ndarray] = []
@@ -238,7 +239,7 @@ class BlipModels:
                 encoded = model.visual_encoder(tensor)
                 out.append(model.vision_proj(encoded[:, 0, :]).cpu().numpy())
         if not out:
-            return np.zeros((0, 768), dtype=np.float32)
+            return np.zeros((0, 256), dtype=np.float32)
         return np.concatenate(out, axis=0).astype(np.float32)
 
     def frame_captions(self, frames: np.ndarray,
@@ -264,7 +265,7 @@ class BlipModels:
         torch = self._torch()
         model = self.itm
         if not len(sentences):
-            return np.zeros((0, 768), dtype=np.float32)
+            return np.zeros((0, 256), dtype=np.float32)
         out: List[np.ndarray] = []
         with torch.no_grad():
             for start in range(0, len(sentences), self.cfg.batch_size):
@@ -373,7 +374,8 @@ class BlipFeatures(FeatureProvider):
             if path is None:
                 raise ModelUnavailable(f"video file for {video_id!r} not found")
             self._frames[video_id] = decode_frames(path, stride=self.cfg.stride,
-                                                   input_size=self.cfg.input_size)
+                                                   input_size=self.cfg.input_size,
+                                                   sampling_fps=self.cfg.sampling_fps)
         return self._frames[video_id]
 
     def frame_features(self, video_id: str) -> Optional[np.ndarray]:
@@ -388,13 +390,15 @@ class BlipFeatures(FeatureProvider):
                      frame_indices: Sequence[int]) -> Tuple[List[str], Optional[np.ndarray]]:
         frames = self._frames.get(video_id)
         if frames is None:
-            return [""] * len(frame_indices), None
+            frames = self._frames_for(video_id, None)
         valid = [i for i in frame_indices if 0 <= i < len(frames)]
         captions = [""] * len(frame_indices)
         if valid:
             decoded = self.models.frame_captions(frames, valid)
-            for position, text in zip(valid, decoded):
-                captions[frame_indices.index(position)] = text
+            iterator = iter(decoded)
+            for position, frame_index in enumerate(frame_indices):
+                if 0 <= frame_index < len(frames):
+                    captions[position] = next(iterator)
         filled = [c for c in captions if c]
         text_features = None
         if filled:

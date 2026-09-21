@@ -3,10 +3,10 @@
 Three quantities are re-aggregated after every round of refinement:
 
 (1) the mean information density of the pseudo-label events of each video
-    category, used to normalise ``S_density`` and remove baseline differences
-    between categories;
+    category, retained as a diagnostic (its scaling cancels under the default
+    within-video min-max normalization);
 (2) the occurrence frequency and the mean SFS of each event type inside each
-    category, from which event types are confirmed either as *core events*
+    category, from which event types are heuristically labeled as *core events*
     (high frequency, high SFS) or as *background events* (low frequency, low
     SFS);
 (3) the mean number of pseudo-label events of the videos of each category, used
@@ -16,8 +16,8 @@ The class-conditional probability that feeds Eq. (9) is the **fraction of the
 videos of a category that contain an event of a given type**, exactly as the
 example in the paper describes it ("'chopping' occurs in about 75% of videos,
 P = 0.75").  It is therefore not a distribution over types that sums to one;
-several types can each reach a high value, and the multiplicative form of
-Eq. (9) is what keeps a rare event from outranking a common one.
+several types can each reach a high value. Multiplication by midpoint centrality
+does not guarantee that every common event outranks every rare event.
 """
 
 from __future__ import annotations
@@ -178,7 +178,7 @@ class CorpusStats:
 
         alpha = self.cfg.laplace_alpha
         self.p_type_given_category_table = (
-            (videos_with + alpha) / (videos_per_cat[:, None] + alpha * n_types))
+            (videos_with + alpha) / (videos_per_cat[:, None] + 2 * alpha))
 
     def p_type_given_category(self, event: CandidateEvent,
                               category_id: Optional[int]) -> float:

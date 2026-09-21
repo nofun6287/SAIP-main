@@ -81,6 +81,8 @@ class BoundaryCalibrationNet(nn.Module):
 
         h = x.transpose(1, 2)                                        # (B, d, T)
         h = self.norm1(F.gelu(self.conv1(h)).transpose(1, 2))        # Eq. (11)
+        if padding_mask is not None:
+            h = h * padding_mask.unsqueeze(-1)
         h = self.norm2(F.gelu(self.conv2(h.transpose(1, 2))).transpose(1, 2))
         h = self.proj(h)                                             # (B, T, d_attn)
         attn_out, _ = self.attn(h, h, h, key_padding_mask=key_padding)
@@ -198,7 +200,7 @@ def diou_loss(logits: torch.Tensor,
 
     inter = torch.clamp(torch.minimum(e_gt, e_pred) - torch.maximum(s_gt, s_pred) + 1.0,
                         min=0.0)
-    union = torch.maximum(e_gt, e_pred) - torch.minimum(s_gt, s_pred) + 1.0
+    union = (e_gt - s_gt + 1.0) + (e_pred - s_pred + 1.0) - inter
     iou = inter / union.clamp(min=1e-6)
     # rho: distance between the centres; c: diagonal of the enclosing box.
     rho_sq = (((s_gt + e_gt) - (s_pred + e_pred)) / 2.0) ** 2

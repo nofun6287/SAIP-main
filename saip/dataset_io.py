@@ -7,7 +7,7 @@ layouts are supported, both of which downstream DVC code consumes directly:
     ``train_pseudo.json``::
 
         {"<video_id>": {"duration": 185.2,
-                        "timestamps": [[0.13, 0.42], ...],   # normalised to [0, 1]
+                        "timestamps": [[13.0, 42.0], ...],   # seconds
                         "sentences":  ["a person ...", ...]}}
 
 ``charades``
@@ -17,9 +17,7 @@ layouts are supported, both of which downstream DVC code consumes directly:
 
 Frame indices are converted with the sampling rate gamma: frame ``t`` covers the
 half-open interval ``[t / gamma, (t + 1) / gamma)``.  Timestamps in the
-ActivityNet layout are then divided by the video duration, which keeps events
-that sit at the very end of a video inside ``[0, 1]`` even when the recorded
-duration and the sampled frame count disagree slightly.
+ActivityNet layout are expressed in seconds and clipped to the video duration.
 """
 
 from __future__ import annotations
@@ -84,8 +82,8 @@ def build_activitynet_records(units: Iterable[object],
         spans = []
         for event in unit.selected:
             start, end = frame_span_to_seconds(event.s, event.e, fps)
-            start = float(np.clip(start / duration, 0.0, 1.0))
-            end = float(np.clip(end / duration, 0.0, 1.0))
+            start = float(np.clip(start, 0.0, duration))
+            end = float(np.clip(end, 0.0, duration))
             if end > start:
                 spans.append((start, end, event.caption))
         # Written in chronological order, as in the ActivityNet annotations.
@@ -103,8 +101,11 @@ def build_charades_lines(units: Iterable[object], fps: float) -> List[str]:
     """Assemble the Charades-style ``<vid> <start> <end>##<description>`` lines."""
     lines: List[str] = []
     for unit in units:
-        for event in getattr(unit, "selected", []):
+        for event in sorted(getattr(unit, "selected", []), key=lambda e: e.s):
             start, end = frame_span_to_seconds(event.s, event.e, fps)
+            end = min(end, unit.duration)
+            if end <= start or not event.caption.strip():
+                continue
             lines.append(f"{unit.video_id} {start:.2f} {end:.2f}##"
                          f"{event.caption.strip()}")
     return lines

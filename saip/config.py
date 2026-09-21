@@ -199,7 +199,7 @@ class CalibrationConfig:
     #: Video categories are taken from the manifest when it carries a
     #: ``category`` field (ActivityNet does), and discovered by clustering the
     #: video-level mean features otherwise.
-    use_manifest_categories: bool = True
+    use_manifest_categories: bool = False
 
 
 @dataclass
@@ -234,6 +234,7 @@ class FeatureConfig:
     #: Frame sampling: the video is decoded at ``video_fps / stride`` fps, the
     #: value that must match ``CandidateConfig.fps``.
     stride: int = 8
+    sampling_fps: Optional[float] = None
     input_size: int = 384
 
     #: Number of caption samples drawn per frame; the first one is used.

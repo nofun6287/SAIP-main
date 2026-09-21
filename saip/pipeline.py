@@ -88,6 +88,7 @@ class SAIPPipeline:
     def __init__(self, cfg: SAIPConfig, provider: Optional[FeatureProvider] = None,
                  verbose: bool = True) -> None:
         self.cfg = cfg.apply_ablations()
+        cfg.features.sampling_fps = cfg.candidates.fps
         self.provider = provider or build_provider(cfg.features)
         self.verbose = verbose
         self.units: List[VideoUnit] = []
@@ -104,9 +105,13 @@ class SAIPPipeline:
     def _build_pool(self, record: dict) -> Optional[VideoUnit]:
         video_id = record["id"]
         features = self.provider.frame_features(video_id)
+        if features is None and hasattr(self.provider, "set_video"):
+            features = self.provider.set_video(video_id, record.get("path"))
         if features is None or features.shape[0] < 8:
             self.notes.append(f"{video_id}: no usable frame features, skipped")
             return None
+        if features.ndim != 2 or not np.isfinite(features).all():
+            raise ValueError(f"{video_id}: features must be a finite (T, d) array")
 
         pool, meta = build_candidates(features, self.cfg.candidates)
         if not pool:
@@ -117,8 +122,14 @@ class SAIPPipeline:
             video_id, [event.mid for event in pool])
         for index, event in enumerate(pool):
             event.caption = captions[index] if index < len(captions) else ""
+            if not event.caption:
+                raise ValueError(f"{video_id}: missing caption at frame {event.mid}")
             if text_features is not None and index < len(text_features):
                 event.text_feat = text_features[index]
+                if event.text_feat.shape != (features.shape[1],) or not np.isfinite(event.text_feat).all():
+                    raise ValueError(f"{video_id}: invalid shared-space text feature")
+            else:
+                raise ValueError(f"{video_id}: missing text features")
 
         duration = record.get("duration") or features.shape[0] / max(
             self.cfg.candidates.fps, 1e-9)
@@ -128,6 +139,8 @@ class SAIPPipeline:
 
     def _reselect(self, unit: VideoUnit) -> None:
         """Recompute SFS over the pool of one video and run greedy selection."""
+        if self.stats is not None:
+            self.stats.predict_event_types(unit.pool)
         compute_sfs(unit.pool, unit.features, unit.length,
                     fps=self.cfg.candidates.fps,
                     cfg=self.cfg.sfs, stats=self.stats,
@@ -173,6 +186,8 @@ class SAIPPipeline:
         if not data:
             return None
 
+        import torch
+        torch.manual_seed(self.cfg.bcnet.seed + index)
         model = BoundaryCalibrationNet(feat_dim=int(self.units[0].features.shape[1]),
                                        cfg=self.cfg.bcnet)
         losses = train_boundary_net(model, data, cfg=self.cfg.bcnet,
@@ -203,6 +218,8 @@ class SAIPPipeline:
         for unit in self.units:
             self._reselect(unit)
         self.stats.fit(self.units)
+        for unit in self.units:
+            self._reselect(unit)
 
         jaccard = 1.0
         displacement = 0.0
