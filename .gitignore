@@ -8,6 +8,8 @@ dist/
 
 # Environments
 .venv/
+.runtime/
+work/
 venv/
 env/
 
