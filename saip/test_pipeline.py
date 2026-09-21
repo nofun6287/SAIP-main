@@ -254,9 +254,10 @@ def test_p_type_given_category_is_a_video_frequency():
     stats.fit_priors(videos)
     table = stats.p_type_given_category_table
     assert table.shape == (1, 3)
-    # Type 0 occurs in 4 of 4 videos -> (4 + 0.5) / (4 + 1.5), i.e. near 1 and
+    # Bernoulli presence smoothing: (4 + 0.5) / (4 + 2 * 0.5).
     # far above the 4 / 7 = 0.57 a normalised distribution over types would give.
     assert table[0, 0] > 0.8
+    assert np.isclose(table[0, 0], .9)
     assert table[0, 1] < table[0, 0]
     assert not np.isclose(table.sum(), 1.0)
 
@@ -314,7 +315,7 @@ def _run_end_to_end(root: Path):
         starts = [span[0] for span in record["timestamps"]]
         assert starts == sorted(starts), "events must be written in time order"
         for start, end in record["timestamps"]:
-            assert 0.0 <= start < end <= 1.0
+            assert 0.0 <= start < end <= record['duration']
 
     report = json.loads((out_dir / "saip_report.json").read_text())
     assert report["calibration"]["n_categories"] >= 1
